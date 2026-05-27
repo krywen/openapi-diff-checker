@@ -37,6 +37,7 @@ DEFAULT_VALUES: dict[str, Any] = {
     "writeOnly": False,
     "exclusiveMinimum": False,
     "exclusiveMaximum": False,
+    "additionalProperties": True,
 }
 
 SET_SEMANTICS_KEYS = frozenset({
