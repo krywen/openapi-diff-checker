@@ -781,6 +781,48 @@ class TestPathOrdering:
         )
 
 
+class TestResponseCodeQuoting:
+    def test_unquoted_vs_quoted_response_code_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  responses:
+                    200:
+                      description: User registered/synced successfully
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  responses:
+                    "200":
+                      description: User registered/synced successfully
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Quoted vs unquoted response codes should be equivalent "
+            f"but got differences: {result.differences}"
+        )
+
+
 class TestInfoTitleChange:
     def test_title_is_structural(self, tmp_specs):
         src = """\
