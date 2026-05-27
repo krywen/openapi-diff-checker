@@ -26,6 +26,19 @@ INFO_COSMETIC_KEYS = frozenset({
     "license",
 })
 
+DEFAULT_VALUES: dict[str, Any] = {
+    "required": False,
+    "nullable": False,
+    "deprecated": False,
+    "allowEmptyValue": False,
+    "explode": False,
+    "allowReserved": False,
+    "readOnly": False,
+    "writeOnly": False,
+    "exclusiveMinimum": False,
+    "exclusiveMaximum": False,
+}
+
 SET_SEMANTICS_KEYS = frozenset({
     "required",
     "tags",
@@ -227,12 +240,16 @@ def _compare_dicts(
         child_path = f"{path}/{key}"
 
         if key not in dest:
+            if key in DEFAULT_VALUES and src[key] == DEFAULT_VALUES[key]:
+                continue
             diffs.append(_make_diff(
                 child_path, "removed",
                 f"value {src[key]!r} removed",
                 src_lines, dest_lines,
             ))
         elif key not in src:
+            if key in DEFAULT_VALUES and dest[key] == DEFAULT_VALUES[key]:
+                continue
             diffs.append(_make_diff(
                 child_path, "added",
                 f"value {dest[key]!r} added",
