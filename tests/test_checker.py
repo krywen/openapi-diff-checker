@@ -718,6 +718,69 @@ class TestExampleFieldIgnored:
         )
 
 
+class TestPathOrdering:
+    def test_paths_in_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              type: string
+              /items:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              type: integer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /items:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              type: integer
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              type: string
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Path order should not matter but got differences: {result.differences}"
+        )
+
+
 class TestInfoTitleChange:
     def test_title_is_structural(self, tmp_specs):
         src = """\
