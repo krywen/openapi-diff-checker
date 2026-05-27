@@ -781,6 +781,78 @@ class TestPathOrdering:
         )
 
 
+class TestRequiredDefaults:
+    def test_required_false_vs_omitted_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  parameters:
+                    - name: filter
+                      in: query
+                      required: false
+                      schema:
+                        type: string
+                  requestBody:
+                    required: false
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            email:
+                              type: string
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  parameters:
+                    - name: filter
+                      in: query
+                      schema:
+                        type: string
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                            email:
+                              type: string
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"required: false vs omitted should be equivalent "
+            f"but got differences: {result.differences}"
+        )
+
+
 class TestResponseCodeQuoting:
     def test_unquoted_vs_quoted_response_code_are_equivalent(self, tmp_specs):
         src = """\
@@ -793,7 +865,7 @@ class TestResponseCodeQuoting:
                 post:
                   responses:
                     200:
-                      description: User registered/synced successfully
+                      description: User registered successfully
                       content:
                         application/json:
                           schema:
@@ -809,7 +881,7 @@ class TestResponseCodeQuoting:
                 post:
                   responses:
                     "200":
-                      description: User registered/synced successfully
+                      description: User registered successfully
                       content:
                         application/json:
                           schema:

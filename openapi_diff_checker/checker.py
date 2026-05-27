@@ -201,6 +201,10 @@ def _compare_nodes(
         ))
 
 
+def _normalize_keys(d: dict) -> dict[str, Any]:
+    return {str(k): v for k, v in d.items()}
+
+
 def _compare_dicts(
     src: dict,
     dest: dict,
@@ -209,6 +213,8 @@ def _compare_dicts(
     src_lines: dict[str, int],
     dest_lines: dict[str, int],
 ) -> None:
+    src = _normalize_keys(src)
+    dest = _normalize_keys(dest)
     is_info = path == "/info"
 
     all_keys = set(src) | set(dest)
