@@ -781,6 +781,64 @@ class TestPathOrdering:
         )
 
 
+class TestSchemaNameIrrelevant:
+    def test_different_schema_names_same_structure_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/UserResponse'
+            components:
+              schemas:
+                UserResponse:
+                  type: object
+                  properties:
+                    age:
+                      type: integer
+                    name:
+                      type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            $ref: '#/components/schemas/Person'
+            components:
+              schemas:
+                Person:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    age:
+                      type: integer
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Schema names should be irrelevant when structure matches: "
+            f"{result.differences}"
+        )
+
+
 class TestRequiredDefaults:
     def test_required_false_vs_omitted_are_equivalent(self, tmp_specs):
         src = """\
