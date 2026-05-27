@@ -14,6 +14,11 @@ COSMETIC_KEYS = frozenset({
     "x-",
 })
 
+EXAMPLE_KEYS = frozenset({
+    "example",
+    "examples",
+})
+
 INFO_COSMETIC_KEYS = frozenset({
     "description",
     "termsOfService",
@@ -154,6 +159,8 @@ def _compare_dicts(
                 kind="added",
                 detail=f"value {dest[key]!r} added",
             ))
+        elif key in EXAMPLE_KEYS:
+            _compare_example(src[key], dest[key], child_path, diffs)
         else:
             _compare_nodes(src[key], dest[key], child_path, diffs)
 
@@ -238,3 +245,17 @@ def _sort_key(value: Any) -> str:
     if isinstance(value, dict):
         return str(sorted(value.items()))
     return str(value)
+
+
+def _compare_example(
+    src: Any,
+    dest: Any,
+    path: str,
+    diffs: list[Difference],
+) -> None:
+    if type(src) is not type(dest):
+        diffs.append(Difference(
+            path=path,
+            kind="type_changed",
+            detail=f"{type(src).__name__} -> {type(dest).__name__}",
+        ))

@@ -639,6 +639,85 @@ class TestExampleFieldIgnored:
         )
 
 
+    def test_example_type_change_float_to_int_is_not_cosmetic(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 123.45
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 123
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "A float-to-int type change in example should be flagged"
+        )
+
+    def test_example_type_change_int_to_float_is_not_cosmetic(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 1
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 1.0
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "An int-to-float type change in example should be flagged"
+        )
+
+
 class TestInfoTitleChange:
     def test_title_is_structural(self, tmp_specs):
         src = """\
