@@ -592,6 +592,69 @@ class TestSetSemantics:
         assert any(d.kind == "added" and "email" in d.detail for d in result.differences)
 
 
+class TestYamlListStyles:
+    def test_flow_vs_block_required_list_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required: [name, email]
+                          properties:
+                            name:
+                              type: string
+                            email:
+                              type: string
+                  responses:
+                    "201":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          required:
+                            - name
+                            - email
+                          properties:
+                            name:
+                              type: string
+                            email:
+                              type: string
+                  responses:
+                    "201":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Flow [name, email] vs block list should be equivalent: {result.differences}"
+        )
+
+
 class TestExampleFieldIgnored:
     def test_different_example_values_are_equivalent(self, tmp_specs):
         src = """\
