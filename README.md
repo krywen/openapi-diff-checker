@@ -1,6 +1,6 @@
 # openapi-diff-checker
 
-Verify if two OpenAPI files are functionally equivalent. Ignores cosmetic fields (descriptions, summaries, extensions) and compares paths, data types, formats, and structural shape. Resolves `$ref` references before comparing.
+Verify if two OpenAPI files are **functionally equivalent*. Ignores cosmetic fields (descriptions, summaries, extensions), handle optional defaults, and compares paths, data types, formats, and structural shape. Resolves `$ref` references before comparing.
 
 ## Installation
 
