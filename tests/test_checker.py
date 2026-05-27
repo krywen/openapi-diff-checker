@@ -592,6 +592,53 @@ class TestSetSemantics:
         assert any(d.kind == "added" and "email" in d.detail for d in result.differences)
 
 
+class TestExampleFieldIgnored:
+    def test_different_example_values_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  summary: Get total portfolio value
+                  description: Returns the total USD value of all token holdings (excluding USDC).
+                  responses:
+                    "200":
+                      description: Total portfolio value in USD
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 142.0
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /user-balance/total:
+                get:
+                  summary: Get total portfolio value
+                  description: Returns the total USD value of all token holdings (excluding USDC).
+                  responses:
+                    "200":
+                      description: Total portfolio value in USD
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+                            example: 142.57
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Expected equivalent but got differences: {result.differences}"
+        )
+
+
 class TestInfoTitleChange:
     def test_title_is_structural(self, tmp_specs):
         src = """\
