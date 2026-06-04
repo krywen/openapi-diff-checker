@@ -237,3 +237,154 @@ class TestStructuralDifferences:
             d.kind == "type_changed" and d.path.endswith("/type")
             for d in result.differences
         ), f"expected a type_changed on /type, got: {result.differences}"
+
+
+class TestHttpMethods:
+    """Guard: adding or removing an HTTP method on a path is a difference."""
+
+    def test_method_added(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+                post:
+                  responses:
+                    "201":
+                      description: created
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+        assert any(d.kind == "added" and d.path.endswith("/post") for d in result.differences)
+
+    def test_method_removed(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+                delete:
+                  responses:
+                    "204":
+                      description: gone
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+        assert any(d.kind == "removed" and d.path.endswith("/delete") for d in result.differences)
+
+
+class TestContentTypes:
+    """Guard: media types in `content` are part of the contract."""
+
+    def test_media_type_changed(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/xml:
+                          schema:
+                            type: object
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+        assert any("application/xml" in d.path or "application/json" in d.path
+                   for d in result.differences)
+
+    def test_added_media_type(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                        application/xml:
+                          schema:
+                            type: object
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False

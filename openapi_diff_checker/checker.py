@@ -79,6 +79,50 @@ class DiffResult:
     differences: list[Difference] = field(default_factory=list)
 
 
+def _path_has_prefix(path: str, prefix: str) -> bool:
+    if path == prefix:
+        return True
+    if path.startswith(prefix):
+        return path[len(prefix):len(prefix) + 1] in ("/", "[")
+    return False
+
+
+@dataclass
+class _LineMap:
+    """Maps a comparison path to its source line.
+
+    ``lines`` holds exact positions from the raw document. ``origins`` records,
+    for every ``$ref``, the path where it was used and the definition path it
+    pointed to. A lookup that misses an exact line follows the ``$ref`` chain
+    back to the component definition (which is where the real source line is),
+    so differences in inlined content still report a meaningful line.
+    """
+
+    lines: dict[str, int]
+    origins: dict[str, str]
+
+    def get(self, path: str) -> int | None:
+        seen: set[str] = set()
+        current: str | None = path
+        while current is not None and current not in seen:
+            if current in self.lines:
+                return self.lines[current]
+            seen.add(current)
+            current = self._follow_origin(current)
+        return None
+
+    def _follow_origin(self, path: str) -> str | None:
+        best: str | None = None
+        for use_path in self.origins:
+            if _path_has_prefix(path, use_path) and (
+                best is None or len(use_path) > len(best)
+            ):
+                best = use_path
+        if best is None:
+            return None
+        return self.origins[best] + path[len(best):]
+
+
 def compare(
     src: str | Path,
     dest: str | Path,
@@ -110,14 +154,43 @@ def _load(path: str | Path) -> dict:
     return yaml.safe_load(text)
 
 
-def _build_line_map(path: str | Path) -> dict[str, int]:
+def _build_line_map(path: str | Path) -> _LineMap:
     text = Path(path).read_text(encoding="utf-8")
     root_node = yaml.compose(text, Loader=yaml.SafeLoader)
-    if root_node is None:
-        return {}
-    line_map: dict[str, int] = {}
-    _walk_yaml_node(root_node, "", line_map)
-    return line_map
+    lines: dict[str, int] = {}
+    if root_node is not None:
+        _walk_yaml_node(root_node, "", lines)
+    origins: dict[str, str] = {}
+    _collect_ref_origins(yaml.safe_load(text), "", origins)
+    return _LineMap(lines, origins)
+
+
+def _collect_ref_origins(node: Any, path: str, origins: dict[str, str]) -> None:
+    """Record, for each internal ``$ref``, the use-site path -> definition path.
+
+    Paths are built the same way comparison builds them (including path-template
+    normalization under ``/paths``) so the recorded use-site paths line up with
+    the paths seen during comparison.
+    """
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if len(node) == 1 and isinstance(ref, str) and ref.startswith("#/"):
+            segments = (
+                seg.replace("~1", "/").replace("~0", "~")
+                for seg in ref[2:].split("/")
+            )
+            origins[path] = "/" + "/".join(segments)
+            return
+        for key, value in node.items():
+            child_key = (
+                _normalize_path_template(key)
+                if path == "/paths" and isinstance(key, str)
+                else key
+            )
+            _collect_ref_origins(value, f"{path}/{child_key}", origins)
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            _collect_ref_origins(item, f"{path}[{i}]", origins)
 
 
 def _walk_yaml_node(
@@ -141,12 +214,10 @@ def _walk_yaml_node(
             _walk_yaml_node(item_node, child_path, line_map)
 
 
-def _lookup_line(line_map: dict[str, int], path: str) -> int | None:
-    # Exact match only. After normalization/inlining (path params, $ref and
-    # security scheme inlining, keyed parameters) many comparison paths are
-    # synthetic and have no single source location. Returning an ancestor's
-    # line in those cases produced misleading numbers, so we omit the line
-    # instead of guessing.
+def _lookup_line(line_map: _LineMap, path: str) -> int | None:
+    # Resolve an exact line, following $ref provenance for inlined content.
+    # Paths with no exact match and no resolvable origin (e.g. security or
+    # parameter inlining) return None rather than a misleading guess.
     return line_map.get(path)
 
 
@@ -154,8 +225,8 @@ def _make_diff(
     path: str,
     kind: str,
     detail: str,
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> Difference:
     return Difference(
         path=path,
@@ -503,8 +574,8 @@ def _compare_nodes(
     dest: Any,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     if type(src) is not type(dest):
         diffs.append(_make_diff(
@@ -535,8 +606,8 @@ def _compare_dicts(
     dest: dict,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     src = _normalize_keys(src)
     dest = _normalize_keys(dest)
@@ -586,8 +657,8 @@ def _compare_lists(
     dest: list,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     parent_key = path.rsplit("/", 1)[-1] if "/" in path else ""
 
@@ -633,8 +704,8 @@ def _compare_parameters(
     dest: list,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     """Compare ``parameters`` keyed by (name, in) rather than by position.
 
@@ -670,8 +741,8 @@ def _compare_as_sets(
     dest: list,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     src_hashable = all(_is_hashable(item) for item in src)
     dest_hashable = all(_is_hashable(item) for item in dest)
@@ -728,8 +799,8 @@ def _compare_example(
     dest: Any,
     path: str,
     diffs: list[Difference],
-    src_lines: dict[str, int],
-    dest_lines: dict[str, int],
+    src_lines: _LineMap,
+    dest_lines: _LineMap,
 ) -> None:
     if type(src) is not type(dest):
         diffs.append(_make_diff(

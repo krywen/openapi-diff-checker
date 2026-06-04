@@ -85,6 +85,15 @@ The checker compares the **functional contract** of two specs, not their exact t
 
 `$ref` references are fully resolved before comparison.
 
+### Known limitations
+
+`$ref` resolution is not yet cycle-safe or fault-tolerant. These inputs currently raise an exception instead of producing a diff:
+
+- **Circular `$ref`** — a schema that references itself (directly or transitively, e.g. a recursive tree/linked-list node) causes infinite resolution (`RecursionError`).
+- **Dangling `$ref`** — an internal `$ref` pointing at a non-existent component (e.g. `#/components/schemas/Missing`) raises a `KeyError`.
+
+Both are known and not yet handled; avoid running the checker on specs with recursive or broken references until this is addressed.
+
 ## Development
 
 ### Setup

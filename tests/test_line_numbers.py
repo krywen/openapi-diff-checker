@@ -74,10 +74,10 @@ class TestLineNumbers:
         assert "type: number" in src_lines[diff.src_line - 1]
         assert "type: string" in dest_lines[diff.dest_line - 1]
 
-    def test_no_line_for_inlined_ref_content(self, tmp_specs):
+    def test_inlined_ref_resolves_to_component_definition_line(self, tmp_specs):
         # src factors a schema out behind a $ref; the change surfaces at the
-        # use site, which has no single source line, so src_line is omitted
-        # (None) rather than pointing somewhere wrong.
+        # use site (after inlining), but the reported src line follows the
+        # $ref back to the component definition's real source line.
         src = """\
             openapi: "3.0.0"
             info:
@@ -123,9 +123,15 @@ class TestLineNumbers:
 
         changes = [d for d in result.differences if d.path.endswith("/size/type")]
         assert len(changes) == 1, result.differences
-        # The src side is inlined from a $ref, so there is no exact source
-        # line; it must be omitted, not a wrong fallback.
-        assert changes[0].src_line is None
+        diff = changes[0]
+        # src is inlined from a $ref; the line follows the ref back to the
+        # Widget component definition's `type: number` line.
+        src_lines = src_path.read_text().splitlines()
+        assert diff.src_line is not None
+        assert "type: number" in src_lines[diff.src_line - 1]
+        # dest defines it inline, so its line resolves directly.
+        dest_lines = dest_path.read_text().splitlines()
+        assert "type: string" in dest_lines[diff.dest_line - 1]
 
     def test_plain_value_change_reports_both_lines(self, tmp_specs):
         # A change on an ordinary (non-normalized, non-inlined) path resolves
