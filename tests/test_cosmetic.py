@@ -523,3 +523,89 @@ class TestOpenapiVersion:
         assert result.equivalent is False, (
             "openapi minor version difference should be flagged"
         )
+
+
+class TestOperationId:
+    """Decision: an operation's `operationId` is a tooling/codegen identifier,
+    not part of the request/response contract, so it is ignored. But an
+    `operationId` *inside a Link Object* names which operation a link targets —
+    that reference is functional and is still compared."""
+
+    def test_operation_level_operation_id_is_ignored(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  operationId: listUsers
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"operation-level operationId should be ignored: "
+            f"{result.differences}"
+        )
+
+    def test_link_operation_id_is_functional(self, tmp_specs):
+        # A Link Object points at an operation by operationId; retargeting it is
+        # a functional change.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  operationId: createUser
+                  responses:
+                    "201":
+                      description: created
+                      links:
+                        self:
+                          operationId: getUser
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                post:
+                  operationId: addUser
+                  responses:
+                    "201":
+                      description: created
+                      links:
+                        self:
+                          operationId: deleteUser
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        # The operation-level operationId change (createUser -> addUser) is
+        # ignored, but the link's operationId (getUser -> deleteUser) is not.
+        assert result.equivalent is False, (
+            "a link's operationId target change must be flagged"
+        )
+        assert any(
+            d.path.endswith("/links/self/operationId") for d in result.differences
+        ), f"expected the link operationId change, got: {result.differences}"

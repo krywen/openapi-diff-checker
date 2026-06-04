@@ -569,6 +569,13 @@ def _is_info_cosmetic(key: str) -> bool:
     return key in INFO_COSMETIC_KEYS
 
 
+def _is_operation_path(path: str) -> bool:
+    """True if ``path`` points at an operation object (its last segment is an
+    HTTP method, e.g. ``/paths//users/get``)."""
+    segment = path.rsplit("/", 1)[-1] if "/" in path else path
+    return segment in _HTTP_METHODS
+
+
 def _compare_nodes(
     src: Any,
     dest: Any,
@@ -618,6 +625,11 @@ def _compare_dicts(
         if _is_cosmetic(key):
             continue
         if is_info and _is_info_cosmetic(key):
+            continue
+        # An operation's operationId is a tooling identifier, not part of the
+        # contract. It is ignored here, but a Link Object's operationId (which
+        # names a target operation) is under a different parent and is compared.
+        if key == "operationId" and _is_operation_path(path):
             continue
 
         child_path = f"{path}/{key}"
