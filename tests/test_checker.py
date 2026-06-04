@@ -1362,6 +1362,148 @@ class TestOneOfOrder:
             f"allOf order should not matter: {result.differences}"
         )
 
+    def test_genuinely_different_oneof_is_not_equivalent(self, tmp_specs):
+        # Order-independence must not mask a real change: dest replaces one of
+        # the oneOf subschemas (boolean instead of string).
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            oneOf:
+                              - type: number
+                              - type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            oneOf:
+                              - type: number
+                              - type: boolean
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "replacing a oneOf subschema is a functional difference"
+        )
+
+    def test_genuinely_different_anyof_is_not_equivalent(self, tmp_specs):
+        # Order-independence must not mask a real change: dest replaces one of
+        # the anyOf subschemas (boolean instead of string).
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            anyOf:
+                              - type: number
+                              - type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            anyOf:
+                              - type: number
+                              - type: boolean
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "replacing an anyOf subschema is a functional difference"
+        )
+
+    def test_genuinely_different_allof_is_not_equivalent(self, tmp_specs):
+        # Order-independence must not mask a real change: dest changes a
+        # property type inside one of the allOf subschemas.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            allOf:
+                              - type: object
+                                properties:
+                                  age:
+                                    type: integer
+                              - type: object
+                                properties:
+                                  name:
+                                    type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            allOf:
+                              - type: object
+                                properties:
+                                  age:
+                                    type: string
+                              - type: object
+                                properties:
+                                  name:
+                                    type: string
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "changing a property type inside an allOf subschema is a "
+            "functional difference"
+        )
+
 
 class TestEnumDifferences:
     def test_different_enum_values_are_not_equivalent(self, tmp_specs):

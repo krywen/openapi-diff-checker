@@ -48,6 +48,9 @@ SET_SEMANTICS_KEYS = frozenset({
     "security",
     "servers",
     "enum",
+    "oneOf",
+    "anyOf",
+    "allOf",
 })
 
 
