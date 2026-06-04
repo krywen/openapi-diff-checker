@@ -255,3 +255,206 @@ class TestSecurityInheritance:
         assert result.equivalent is False, (
             "explicit public vs required auth is a functional difference"
         )
+
+
+class TestSecuritySchemeNaming:
+    """Decision: a security scheme name is a local binding (like a schema
+    component name). Two specs with the same scheme definition under different
+    names describe the same contract; what matters is the definition and how it
+    is required, not the local label."""
+
+    def test_scheme_name_difference_is_equivalent(self, tmp_specs):
+        # Same scheme definition, referenced consistently, under different
+        # local names (BearerAuth vs bearerAuth) -> equivalent.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - BearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                BearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"differing scheme names with the same definition should be "
+            f"equivalent: {result.differences}"
+        )
+
+    def test_scheme_definition_change_surfaces_despite_name_difference(self, tmp_specs):
+        # Names differ (irrelevant) but the definition also differs
+        # (bearerFormat added) -> that real difference must be reported.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - BearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                BearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+                  bearerFormat: JWT
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "a bearerFormat change must be reported even when scheme names "
+            "differ"
+        )
+        assert any("bearerFormat" in d.path for d in result.differences), (
+            f"expected the bearerFormat change to surface: {result.differences}"
+        )
+
+    def test_different_scheme_type_under_different_names_is_caught(self, tmp_specs):
+        # Names differ AND the auth mechanism differs (http bearer vs apiKey):
+        # a real difference.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - BearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                BearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - apiKeyAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                apiKeyAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "different auth mechanisms are a functional difference"
+        )
+
+    def test_arbitrary_name_renames_are_equivalent(self, tmp_specs):
+        # Names differ in more than just case (bearer_auth vs bearerauth) but
+        # the definition is identical -> equivalent.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearer_auth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearer_auth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerauth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerauth:
+                  type: http
+                  scheme: bearer
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"arbitrary scheme renames with the same definition should be "
+            f"equivalent: {result.differences}"
+        )

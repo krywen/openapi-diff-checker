@@ -91,8 +91,12 @@ def compare(
 
     src_resolved = _resolve_security(_resolve_refs(src_spec, src_spec))
     dest_resolved = _resolve_security(_resolve_refs(dest_spec, dest_spec))
+    src_resolved = _normalize_openapi_version(src_resolved)
+    dest_resolved = _normalize_openapi_version(dest_resolved)
     src_resolved = _normalize_path_params(src_resolved)
     dest_resolved = _normalize_path_params(dest_resolved)
+    src_resolved = _inline_security_schemes(src_resolved)
+    dest_resolved = _inline_security_schemes(dest_resolved)
     src_resolved = _strip_orphan_components(src_resolved)
     dest_resolved = _strip_orphan_components(dest_resolved)
 
@@ -195,6 +199,26 @@ def _describe_change(parent_path: str, key: str, value: Any, verb: str) -> str:
     if isinstance(value, list):
         return f"{subject} {verb} ({len(value)} item(s))"
     return f"{subject} {verb} (value {value!r})"
+
+
+def _normalize_openapi_version(spec: Any) -> Any:
+    """Drop the patch component of the top-level ``openapi`` version field.
+
+    Per the OpenAPI Specification, tooling SHOULD NOT consider the patch
+    version (e.g. 3.0.0 and 3.0.3 are not meaningfully different), while the
+    major and minor versions are significant. We therefore compare only
+    ``major.minor``.
+
+    Spec reference (Versions section):
+    https://spec.openapis.org/oas/latest.html#versions
+    """
+    if not isinstance(spec, dict) or not isinstance(spec.get("openapi"), str):
+        return spec
+    parts = spec["openapi"].split(".")
+    if len(parts) >= 2:
+        spec = copy.deepcopy(spec)
+        spec["openapi"] = f"{parts[0]}.{parts[1]}"
+    return spec
 
 
 _HTTP_METHODS = frozenset({
@@ -301,6 +325,63 @@ def _resolve_security(spec: Any) -> Any:
 
     spec.pop("security", None)
     return spec
+
+
+def _inline_security_schemes(spec: Any) -> Any:
+    """Inline security scheme definitions into the requirements that use them.
+
+    Decision: a security scheme name is a local binding, not part of the
+    contract (a client never sees it). Like a ``$ref`` to a schema, the named
+    scheme is inlined at each use site, so two specs that use the same scheme
+    definition under different names (e.g. ``BearerAuth`` vs ``bearerAuth``)
+    compare equal, while a real definition change (e.g. ``bearerFormat``,
+    ``scheme``) still surfaces. Once names are gone from the requirements, the
+    now-unreferenced ``securitySchemes`` are dropped by orphan stripping.
+    """
+    components = spec.get("components") if isinstance(spec, dict) else None
+    schemes = components.get("securitySchemes") if isinstance(components, dict) else None
+    if not isinstance(schemes, dict):
+        return spec
+
+    spec = copy.deepcopy(spec)
+    _inline_security_walk(spec, spec["components"]["securitySchemes"])
+    return spec
+
+
+def _inline_security_walk(node: Any, schemes: dict) -> None:
+    if isinstance(node, dict):
+        requirements = node.get("security")
+        if isinstance(requirements, list):
+            node["security"] = [
+                _inline_requirement(req, schemes) for req in requirements
+            ]
+        for key, value in node.items():
+            if key != "security":
+                _inline_security_walk(value, schemes)
+    elif isinstance(node, list):
+        for item in node:
+            _inline_security_walk(item, schemes)
+
+
+def _inline_requirement(requirement: Any, schemes: dict) -> Any:
+    """Replace a ``{schemeName: scopes}`` requirement with the resolved
+    definition(s), dropping the local name. Multiple schemes in one requirement
+    (logical AND) become a name-free, order-independent list."""
+    if not isinstance(requirement, dict):
+        return requirement
+    entries = []
+    for name, scopes in requirement.items():
+        definition = schemes.get(name)
+        if isinstance(definition, dict):
+            entry = copy.deepcopy(definition)
+            entry["scopes"] = scopes
+        else:
+            # Unresolved scheme name: keep the name so a dangling reference
+            # still registers as a difference.
+            entry = {"unresolvedScheme": name, "scopes": scopes}
+        entries.append(entry)
+    entries.sort(key=_sort_key)
+    return entries
 
 
 def _resolve_refs(node: Any, root: dict) -> Any:

@@ -456,3 +456,70 @@ class TestYamlListStyles:
         assert result.equivalent is True, (
             f"Flow [name, email] vs block list should be equivalent: {result.differences}"
         )
+
+
+class TestOpenapiVersion:
+    """The `openapi` field declares the spec version. Per the spec, tooling
+    should ignore the patch component but honor major/minor differences."""
+
+    def test_patch_version_difference_is_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        dest = """\
+            openapi: "3.0.3"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"openapi patch version should be ignored: {result.differences}"
+        )
+
+    def test_minor_version_difference_is_not_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        dest = """\
+            openapi: "3.1.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "openapi minor version difference should be flagged"
+        )

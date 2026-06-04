@@ -68,7 +68,9 @@ The checker compares the **functional contract** of two specs, not their exact t
 - **References & components** — a `$ref` vs its inlined equivalent, the names of schema components, and unused (orphan) component definitions.
 - **Omitted vs default** — an optional field left at its default value (e.g. `required: false`, `nullable: false`, `additionalProperties: true`) vs the field being omitted.
 - **Formatting** — quoted vs unquoted response codes (`"200"` vs `200`) and YAML style (flow vs block).
+- **OpenAPI patch version** — the patch component of the `openapi` field is ignored (`3.0.0` vs `3.0.3`), per the spec; major/minor differences are still flagged.
 - **Path parameter names** — `/items/{id}` and `/items/{itemId}` describe the same endpoint.
+- **Security scheme names** — a scheme name is a local binding, so the same definition under different names (e.g. `BearerAuth` vs `bearerAuth`) is equivalent.
 - **Security expressed differently** — a global `security` default vs the same requirement repeated per operation, and an explicit `security: []` vs an implicitly public operation.
 
 #### Treated as a difference (flagged)
