@@ -293,6 +293,11 @@ def _resolve_security(spec: Any) -> Any:
                 continue
             if "security" not in operation and global_security is not None:
                 operation["security"] = copy.deepcopy(global_security)
+            # Canonicalize "public": after inheritance, an explicit empty
+            # `security: []` and an absent requirement both mean no auth, so
+            # drop the empty list to make the two forms compare equal.
+            if operation.get("security") == []:
+                operation.pop("security", None)
 
     spec.pop("security", None)
     return spec

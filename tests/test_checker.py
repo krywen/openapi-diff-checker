@@ -2325,3 +2325,92 @@ class TestSecurityInheritance:
             "dropping a required auth (operation becomes public) is a "
             "functional difference"
         )
+
+    def test_explicit_public_equals_implicit_public(self, tmp_specs):
+        # src has a global default but the operation opts out with `security: []`
+        # (explicitly public). dest has no global and no operation security
+        # (implicitly public). Both are public -> equivalent.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerAuth: []
+            paths:
+              /tokenPrice:
+                get:
+                  security: []
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"explicit `security: []` and implicit public should be "
+            f"equivalent: {result.differences}"
+        )
+
+    def test_explicit_public_vs_required_is_caught(self, tmp_specs):
+        # An explicitly public operation is NOT equivalent to one that requires
+        # auth.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  security: []
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  security:
+                    - bearerAuth: []
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "explicit public vs required auth is a functional difference"
+        )
