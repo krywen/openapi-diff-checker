@@ -1031,6 +1031,55 @@ class TestEnumDifferences:
         result = compare(src, dest)
         assert result.equivalent is False
 
+    def test_same_enum_values_in_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  parameters:
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        enum: [1H, 1D, 1W, 1M, ALL]
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  parameters:
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        enum: [ALL, 1M, 1H, 1W, 1D]
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"enum order should not matter: {result.differences}"
+        )
+
 
 class TestPathOrdering:
     def test_paths_in_different_order_are_equivalent(self, tmp_specs):
