@@ -394,6 +394,12 @@ def _compare_dicts(
 
         child_path = f"{path}/{key}"
 
+        # An example present on only one side is documentation completeness,
+        # not a contract change. When present on both, _compare_example still
+        # flags a change in the example's type.
+        if key in EXAMPLE_KEYS and (key not in src or key not in dest):
+            continue
+
         if key not in dest:
             if key in DEFAULT_VALUES and src[key] == DEFAULT_VALUES[key]:
                 continue

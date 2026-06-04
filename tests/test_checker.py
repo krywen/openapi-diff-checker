@@ -1108,6 +1108,58 @@ class TestExampleFieldIgnored:
             "An int-to-float type change in example should be flagged"
         )
 
+    def test_missing_example_is_ignored(self, tmp_specs):
+        # An example present on one side but absent on the other is just
+        # documentation completeness, not a contract change.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                post:
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          properties:
+                            presetFiatAmount:
+                              type: number
+                              description: The preset fiat amount
+                  responses:
+                    "200":
+                      description: ok
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                post:
+                  requestBody:
+                    content:
+                      application/json:
+                        schema:
+                          type: object
+                          properties:
+                            presetFiatAmount:
+                              type: number
+                              description: USD amount to deposit
+                              example: 50
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"a missing example should be ignored: {result.differences}"
+        )
+
 
 class TestPathParameterNames:
     def test_different_path_param_names_and_query_examples_are_equivalent(self, tmp_specs):
