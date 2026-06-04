@@ -85,8 +85,10 @@ def compare(
     src_lines = _build_line_map(src)
     dest_lines = _build_line_map(dest)
 
-    src_resolved = _strip_orphan_components(_resolve_refs(src_spec, src_spec))
-    dest_resolved = _strip_orphan_components(_resolve_refs(dest_spec, dest_spec))
+    src_resolved = _resolve_security(_resolve_refs(src_spec, src_spec))
+    dest_resolved = _resolve_security(_resolve_refs(dest_spec, dest_spec))
+    src_resolved = _strip_orphan_components(src_resolved)
+    dest_resolved = _strip_orphan_components(dest_resolved)
 
     diffs: list[Difference] = []
     _compare_nodes(src_resolved, dest_resolved, "", diffs, src_lines, dest_lines)
@@ -187,6 +189,45 @@ def _describe_change(parent_path: str, key: str, value: Any, verb: str) -> str:
     if isinstance(value, list):
         return f"{subject} {verb} ({len(value)} item(s))"
     return f"{subject} {verb} (value {value!r})"
+
+
+_HTTP_METHODS = frozenset({
+    "get", "put", "post", "delete", "options", "head", "patch", "trace",
+})
+
+
+def _resolve_security(spec: Any) -> Any:
+    """Push the global ``security`` default down onto each operation.
+
+    Decision: the same effective security expressed differently is equivalent.
+    A top-level ``security`` is the default for every operation that does not
+    declare its own, so we inline it onto those operations and drop the
+    top-level key. After this, a spec that declares a requirement globally
+    compares equal to one that repeats it per operation.
+
+    An operation that declares its own ``security`` (including an explicit
+    empty ``[]``, meaning "public") keeps it untouched.
+    """
+    if not isinstance(spec, dict):
+        return spec
+
+    global_security = spec.get("security")
+    paths = spec.get("paths")
+    if not isinstance(paths, dict):
+        return spec
+
+    spec = copy.deepcopy(spec)
+    for path_item in spec["paths"].values():
+        if not isinstance(path_item, dict):
+            continue
+        for method, operation in path_item.items():
+            if method not in _HTTP_METHODS or not isinstance(operation, dict):
+                continue
+            if "security" not in operation and global_security is not None:
+                operation["security"] = copy.deepcopy(global_security)
+
+    spec.pop("security", None)
+    return spec
 
 
 def _resolve_refs(node: Any, root: dict) -> Any:
