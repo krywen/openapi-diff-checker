@@ -1316,12 +1316,13 @@ class TestResponseCodeQuoting:
         )
 
 
-class TestInfoTitleChange:
-    def test_title_is_structural(self, tmp_specs):
+class TestInfoMetadataCosmetic:
+    def test_title_description_version_differences_are_equivalent(self, tmp_specs):
         src = """\
             openapi: "3.0.0"
             info:
               title: Old API
+              description: The original description.
               version: "1.0"
             paths: {}
         """
@@ -1329,9 +1330,13 @@ class TestInfoTitleChange:
             openapi: "3.0.0"
             info:
               title: New API
-              version: "1.0"
+              description: A completely rewritten description.
+              version: "2.0"
             paths: {}
         """
         src, dest = tmp_specs(src, dest)
         result = compare(src, dest)
-        assert result.equivalent is False
+        assert result.equivalent is True, (
+            f"info title/description/version should be cosmetic: "
+            f"{result.differences}"
+        )

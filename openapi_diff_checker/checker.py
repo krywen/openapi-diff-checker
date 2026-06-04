@@ -20,6 +20,8 @@ EXAMPLE_KEYS = frozenset({
 })
 
 INFO_COSMETIC_KEYS = frozenset({
+    "title",
+    "version",
     "description",
     "termsOfService",
     "contact",
