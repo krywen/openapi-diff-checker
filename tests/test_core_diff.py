@@ -193,3 +193,47 @@ class TestStructuralDifferences:
         result = compare(src, dest)
         assert result.equivalent is False
         assert any(d.kind == "added" and "404" in d.path for d in result.differences)
+
+    def test_value_type_changed(self, tmp_specs):
+        # The `type` value is a scalar string in one spec and a list in the
+        # other (OpenAPI 3.1 nullable syntax). The node's Python type differs
+        # (str vs list), so it is reported as a "type_changed" difference.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /users:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type:
+                              - string
+                              - "null"
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+        assert any(
+            d.kind == "type_changed" and d.path.endswith("/type")
+            for d in result.differences
+        ), f"expected a type_changed on /type, got: {result.differences}"
