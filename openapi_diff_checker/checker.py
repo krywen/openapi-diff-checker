@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,8 @@ def compare(
 
     src_resolved = _resolve_security(_resolve_refs(src_spec, src_spec))
     dest_resolved = _resolve_security(_resolve_refs(dest_spec, dest_spec))
+    src_resolved = _normalize_path_params(src_resolved)
+    dest_resolved = _normalize_path_params(dest_resolved)
     src_resolved = _strip_orphan_components(src_resolved)
     dest_resolved = _strip_orphan_components(dest_resolved)
 
@@ -197,6 +200,68 @@ def _describe_change(parent_path: str, key: str, value: Any, verb: str) -> str:
 _HTTP_METHODS = frozenset({
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 })
+
+_PATH_VAR_RE = re.compile(r"\{([^}]+)\}")
+
+
+def _normalize_path_params(spec: Any) -> Any:
+    """Canonicalize path-parameter names to positional placeholders.
+
+    Decision: a path-parameter name is a local binding, not part of the API
+    contract. ``/tokenPrice/{tokenId}`` and ``/tokenPrice/{id}`` describe the
+    same endpoint. Each path template variable is renamed by position
+    (``{param0}``, ``{param1}``, ...) in both the path key and the matching
+    ``in: path`` parameter objects, so differing names no longer count while a
+    different URL *structure* (extra/renamed literal segments, different number
+    of variables) still does.
+    """
+    if not isinstance(spec, dict) or not isinstance(spec.get("paths"), dict):
+        return spec
+
+    spec = copy.deepcopy(spec)
+    new_paths: dict[str, Any] = {}
+    for path_key, path_item in spec["paths"].items():
+        if not isinstance(path_key, str):
+            new_paths[path_key] = path_item
+            continue
+
+        names = _PATH_VAR_RE.findall(path_key)
+        mapping = {name: f"param{i}" for i, name in enumerate(names)}
+
+        counter = [0]
+
+        def _replace(_match: re.Match) -> str:
+            placeholder = f"{{param{counter[0]}}}"
+            counter[0] += 1
+            return placeholder
+
+        new_key = _PATH_VAR_RE.sub(_replace, path_key)
+
+        if isinstance(path_item, dict):
+            _rename_path_params(path_item, mapping)
+        new_paths[new_key] = path_item
+
+    spec["paths"] = new_paths
+    return spec
+
+
+def _rename_path_params(path_item: dict, mapping: dict[str, str]) -> None:
+    _rename_param_list(path_item.get("parameters"), mapping)
+    for method, operation in path_item.items():
+        if method in _HTTP_METHODS and isinstance(operation, dict):
+            _rename_param_list(operation.get("parameters"), mapping)
+
+
+def _rename_param_list(params: Any, mapping: dict[str, str]) -> None:
+    if not isinstance(params, list):
+        return
+    for param in params:
+        if (
+            isinstance(param, dict)
+            and param.get("in") == "path"
+            and param.get("name") in mapping
+        ):
+            param["name"] = mapping[param["name"]]
 
 
 def _resolve_security(spec: Any) -> Any:
@@ -437,6 +502,14 @@ def _compare_lists(
 ) -> None:
     parent_key = path.rsplit("/", 1)[-1] if "/" in path else ""
 
+    if (
+        parent_key == "parameters"
+        and _is_keyable_params(src)
+        and _is_keyable_params(dest)
+    ):
+        _compare_parameters(src, dest, path, diffs, src_lines, dest_lines)
+        return
+
     if parent_key in SET_SEMANTICS_KEYS:
         _compare_as_sets(src, dest, path, diffs, src_lines, dest_lines)
         return
@@ -451,6 +524,56 @@ def _compare_lists(
 
     for i, (s, d) in enumerate(zip(src, dest)):
         _compare_nodes(s, d, f"{path}[{i}]", diffs, src_lines, dest_lines)
+
+
+def _is_keyable_params(items: list) -> bool:
+    """True if every parameter has a unique (name, in) identity."""
+    seen: set[tuple] = set()
+    for item in items:
+        if not isinstance(item, dict) or "name" not in item or "in" not in item:
+            return False
+        key = (item["name"], item["in"])
+        if key in seen:
+            return False
+        seen.add(key)
+    return True
+
+
+def _compare_parameters(
+    src: list,
+    dest: list,
+    path: str,
+    diffs: list[Difference],
+    src_lines: dict[str, int],
+    dest_lines: dict[str, int],
+) -> None:
+    """Compare ``parameters`` keyed by (name, in) rather than by position.
+
+    Decision: a parameter is identified by its name and location, so the order
+    of the list is irrelevant. Matched parameters are compared field-by-field;
+    a parameter present on only one side is added/removed.
+    """
+    src_map = {(p["name"], p["in"]): p for p in src}
+    dest_map = {(p["name"], p["in"]): p for p in dest}
+
+    for key in sorted(set(src_map) | set(dest_map), key=lambda k: (str(k[0]), str(k[1]))):
+        name, location = key
+        child_path = f"{path}[{name}]"
+        if key not in dest_map:
+            diffs.append(_make_diff(
+                child_path, "removed",
+                f"parameter {name!r} (in {location}) removed",
+                src_lines, dest_lines,
+            ))
+        elif key not in src_map:
+            diffs.append(_make_diff(
+                child_path, "added",
+                f"parameter {name!r} (in {location}) added",
+                src_lines, dest_lines,
+            ))
+        else:
+            _compare_nodes(src_map[key], dest_map[key], child_path, diffs,
+                           src_lines, dest_lines)
 
 
 def _compare_as_sets(
