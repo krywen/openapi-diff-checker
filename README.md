@@ -71,6 +71,7 @@ The checker compares the **functional contract** of two specs, not their exact t
 - **OpenAPI patch version** — the patch component of the `openapi` field is ignored (`3.0.0` vs `3.0.3`), per the spec; major/minor differences are still flagged.
 - **Path parameter names** — `/items/{id}` and `/items/{itemId}` describe the same endpoint.
 - **Security scheme names** — a scheme name is a local binding, so the same definition under different names (e.g. `BearerAuth` vs `bearerAuth`) is equivalent.
+- **`operationId`** — an operation's `operationId` is a tooling/codegen identifier, not part of the request/response contract, so it is ignored (a Link Object's `operationId`, which targets an operation, is still compared — see below).
 - **Security expressed differently** — a global `security` default vs the same requirement repeated per operation, and an explicit `security: []` vs an implicitly public operation.
 
 #### Treated as a difference (flagged)
@@ -82,6 +83,7 @@ The checker compares the **functional contract** of two specs, not their exact t
 - **Different URL structure** — extra or renamed path segments, or a different number of path parameters.
 - **Parameter identity** — the same parameter name in a different location (e.g. `path` vs `query`).
 - **Required vs omitted** — `required: true` vs the field being absent.
+- **Link target** — a Link Object's `operationId` (which operation a link points to) changing.
 
 `$ref` references are fully resolved before comparison.
 
@@ -95,6 +97,10 @@ The checker compares the **functional contract** of two specs, not their exact t
 Both are known and not yet handled; avoid running the checker on specs with recursive or broken references until this is addressed.
 
 ## Development
+
+> **Working with an AI agent?** See [`.llm/AGENTS.md`](.llm/AGENTS.md) for the
+> principles on how to extend this tool (TDD, driver + guard tests, keeping the
+> README in sync, the comparison pipeline, and what's out of scope).
 
 ### Setup
 
