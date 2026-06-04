@@ -128,7 +128,12 @@ def _walk_yaml_node(
     line_map[path] = node.start_mark.line + 1
     if isinstance(node, yaml.MappingNode):
         for key_node, value_node in node.value:
-            child_path = f"{path}/{key_node.value}"
+            key = key_node.value
+            # Path keys are normalized the same way as in comparison
+            # (`{tokenId}` -> `{param0}`) so line lookups still resolve.
+            if path == "/paths" and isinstance(key, str):
+                key = _normalize_path_template(key)
+            child_path = f"{path}/{key}"
             _walk_yaml_node(value_node, child_path, line_map)
     elif isinstance(node, yaml.SequenceNode):
         for i, item_node in enumerate(node.value):
@@ -137,19 +142,12 @@ def _walk_yaml_node(
 
 
 def _lookup_line(line_map: dict[str, int], path: str) -> int | None:
-    if path in line_map:
-        return line_map[path]
-    p = path
-    while p:
-        if "[" in p and p.endswith("]"):
-            p = p.rsplit("[", 1)[0]
-        elif "/" in p:
-            p = p.rsplit("/", 1)[0]
-        else:
-            break
-        if p in line_map:
-            return line_map[p]
-    return line_map.get("", None)
+    # Exact match only. After normalization/inlining (path params, $ref and
+    # security scheme inlining, keyed parameters) many comparison paths are
+    # synthetic and have no single source location. Returning an ancestor's
+    # line in those cases produced misleading numbers, so we omit the line
+    # instead of guessing.
+    return line_map.get(path)
 
 
 def _make_diff(
@@ -228,6 +226,19 @@ _HTTP_METHODS = frozenset({
 _PATH_VAR_RE = re.compile(r"\{([^}]+)\}")
 
 
+def _normalize_path_template(path_key: str) -> str:
+    """Rename path template variables to positional placeholders, e.g.
+    ``/items/{tokenId}`` -> ``/items/{param0}``."""
+    counter = [0]
+
+    def _replace(_match: re.Match) -> str:
+        placeholder = f"{{param{counter[0]}}}"
+        counter[0] += 1
+        return placeholder
+
+    return _PATH_VAR_RE.sub(_replace, path_key)
+
+
 def _normalize_path_params(spec: Any) -> Any:
     """Canonicalize path-parameter names to positional placeholders.
 
@@ -251,15 +262,7 @@ def _normalize_path_params(spec: Any) -> Any:
 
         names = _PATH_VAR_RE.findall(path_key)
         mapping = {name: f"param{i}" for i, name in enumerate(names)}
-
-        counter = [0]
-
-        def _replace(_match: re.Match) -> str:
-            placeholder = f"{{param{counter[0]}}}"
-            counter[0] += 1
-            return placeholder
-
-        new_key = _PATH_VAR_RE.sub(_replace, path_key)
+        new_key = _normalize_path_template(path_key)
 
         if isinstance(path_item, dict):
             _rename_path_params(path_item, mapping)
