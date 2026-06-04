@@ -781,6 +781,257 @@ class TestExampleFieldIgnored:
         )
 
 
+class TestPathParameterNames:
+    def test_different_path_param_names_and_query_examples_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice/{tokenId}:
+                get:
+                  parameters:
+                    - name: tokenId
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        example: 1D
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice/{id}:
+                get:
+                  parameters:
+                    - name: id
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        example: 3D
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"Path param names and query example values should be irrelevant: "
+            f"{result.differences}"
+        )
+
+
+class TestOneOfOrder:
+    def test_oneof_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            oneOf:
+                              - type: number
+                              - type: string
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            oneOf:
+                              - type: string
+                              - type: number
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"oneOf order should not matter: {result.differences}"
+        )
+
+
+    def test_anyof_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            anyOf:
+                              - type: number
+                              - type: string
+                              - type: boolean
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            anyOf:
+                              - type: boolean
+                              - type: number
+                              - type: string
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"anyOf order should not matter: {result.differences}"
+        )
+
+    def test_allof_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            allOf:
+                              - type: object
+                                properties:
+                                  name:
+                                    type: string
+                              - type: object
+                                properties:
+                                  age:
+                                    type: integer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /value:
+                get:
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            allOf:
+                              - type: object
+                                properties:
+                                  age:
+                                    type: integer
+                              - type: object
+                                properties:
+                                  name:
+                                    type: string
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"allOf order should not matter: {result.differences}"
+        )
+
+
+class TestEnumDifferences:
+    def test_different_enum_values_are_not_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  parameters:
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        enum: [1H, 1D, 1W, 1M, ALL]
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /tokenPrice:
+                get:
+                  parameters:
+                    - name: timeRange
+                      in: query
+                      schema:
+                        type: string
+                        enum: [1H, 1D, 1W, 1M, MAX]
+                  responses:
+                    "200":
+                      content:
+                        application/json:
+                          schema:
+                            type: number
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+
+
 class TestPathOrdering:
     def test_paths_in_different_order_are_equivalent(self, tmp_specs):
         src = """\
