@@ -592,6 +592,87 @@ class TestSetSemantics:
         assert any(d.kind == "added" and "email" in d.detail for d in result.differences)
 
 
+class TestServers:
+    def test_servers_in_different_order_are_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://api.example.com/v1
+              - url: https://staging.example.com/v1
+              - url: https://dev.example.com/v1
+            paths: {}
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://dev.example.com/v1
+              - url: https://api.example.com/v1
+              - url: https://staging.example.com/v1
+            paths: {}
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"server order should not matter: {result.differences}"
+        )
+
+    def test_servers_with_different_urls_are_not_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://api.example.com/v1
+              - url: https://staging.example.com/v1
+            paths: {}
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://api.example.com/v1
+              - url: https://staging.example.com/v2
+            paths: {}
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+
+    def test_different_server_list_is_not_equivalent(self, tmp_specs):
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://api.example.com/v1
+              - url: https://staging.example.com/v1
+            paths: {}
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            servers:
+              - url: https://api.example.com/v1
+            paths: {}
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False
+        assert any(d.path == "/servers" for d in result.differences)
+
+
 class TestYamlListStyles:
     def test_flow_vs_block_required_list_are_equivalent(self, tmp_specs):
         src = """\
