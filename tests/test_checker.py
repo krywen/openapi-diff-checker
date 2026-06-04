@@ -573,6 +573,147 @@ class TestOrphanComponents:
             f"{result.differences}"
         )
 
+    def test_security_scheme_definition_change_is_caught(self, tmp_specs):
+        # A security scheme is referenced by NAME (not $ref) from `security`,
+        # so it is not orphan: a change to its definition must be detected.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  security:
+                    - bearerAuth: []
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  security:
+                    - bearerAuth: []
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: basic
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "changing a referenced security scheme (bearer -> basic) is a "
+            "functional difference"
+        )
+        assert any("scheme" in d.path for d in result.differences), (
+            f"expected the scheme change to be reported: {result.differences}"
+        )
+
+    def test_security_scheme_referenced_via_global_security_is_kept(self, tmp_specs):
+        # The scheme is referenced only through the GLOBAL security default;
+        # a definition change must still be caught after inheritance resolution.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+                  bearerFormat: JWT
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            security:
+              - bearerAuth: []
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+                  bearerFormat: opaque
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is False, (
+            "a bearerFormat change on a globally-referenced scheme must be "
+            "caught"
+        )
+
+    def test_unused_security_scheme_is_still_orphan(self, tmp_specs):
+        # A security scheme that no `security` requirement names is genuinely
+        # orphan and should not affect equivalence.
+        src = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+            components:
+              securitySchemes:
+                apiKeyAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+        """
+        dest = """\
+            openapi: "3.0.0"
+            info:
+              title: Test API
+              version: "1.0"
+            paths:
+              /x:
+                get:
+                  responses:
+                    "200":
+                      description: ok
+        """
+        src, dest = tmp_specs(src, dest)
+        result = compare(src, dest)
+        assert result.equivalent is True, (
+            f"an unreferenced security scheme is still orphan: "
+            f"{result.differences}"
+        )
+
 
 class TestSetSemantics:
     def test_required_order_irrelevant(self, tmp_specs):

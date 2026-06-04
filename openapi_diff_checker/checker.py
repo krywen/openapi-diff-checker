@@ -264,6 +264,25 @@ def _collect_refs(node: Any, refs: set[str]) -> None:
             _collect_refs(item, refs)
 
 
+def _collect_security_scheme_names(node: Any, names: set[str]) -> None:
+    """Collect security scheme names referenced by ``security`` requirements.
+
+    Unlike schemas, security schemes are referenced by *name* (the keys of a
+    ``security`` requirement object) rather than by ``$ref``, so they need a
+    dedicated pass to be recognized as "referenced" by orphan detection.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "security" and isinstance(value, list):
+                for requirement in value:
+                    if isinstance(requirement, dict):
+                        names.update(requirement.keys())
+            _collect_security_scheme_names(value, names)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_security_scheme_names(item, names)
+
+
 def _strip_orphan_components(spec: Any) -> Any:
     """Drop component definitions that nothing references.
 
@@ -276,12 +295,18 @@ def _strip_orphan_components(spec: Any) -> Any:
 
     Components still pointed at by a surviving ``$ref`` (e.g. an unresolved
     external reference) are kept, so genuine differences are never hidden.
+    Security schemes are referenced by name (not ``$ref``), so those names are
+    collected separately and their definitions are likewise kept.
     """
     if not isinstance(spec, dict) or not isinstance(spec.get("components"), dict):
         return spec
 
     refs: set[str] = set()
     _collect_refs(spec, refs)
+
+    scheme_names: set[str] = set()
+    _collect_security_scheme_names(spec, scheme_names)
+    refs.update(f"#/components/securitySchemes/{name}" for name in scheme_names)
 
     spec = copy.deepcopy(spec)
     kept_components: dict[str, Any] = {}
