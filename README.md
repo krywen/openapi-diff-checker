@@ -1,6 +1,6 @@
 # openapi-diff-checker
 
-Verify if two OpenAPI files are **functionally equivalent*. Ignores cosmetic fields (descriptions, summaries, extensions), handle optional defaults, and compares paths, data types, formats, and structural shape. Resolves `$ref` references before comparing.
+Verify if two OpenAPI files are **functionally equivalent**. Ignores cosmetic fields (descriptions, summaries, extensions), handles optional defaults, and compares paths, data types, formats, and structural shape. Resolves `$ref` references before comparing.
 
 ## Installation
 
@@ -33,8 +33,8 @@ Example output when differences exist:
 ```
 Found 2 functional difference(s):
 
-  [added] /paths/~1users/post: value 'object' added
-  [removed] /paths/~1health/get: value 'string' removed
+  [added] /paths//users/post/responses/401 (src:34, dest:42): response '401' added
+  [changed] /servers (src:7, dest:7): set-like array length 2 -> 1
 ```
 
 ### As a Python library
@@ -55,13 +55,31 @@ else:
 - `equivalent` (bool) -- whether the specs are functionally identical
 - `differences` (list of `Difference`) -- each with `path`, `kind` (`added`/`removed`/`changed`/`type_changed`), and `detail`
 
-### What is compared
+### Equivalence rules
 
-The checker ignores these cosmetic fields:
-- `description`, `summary`, `externalDocs`, any `x-` extension
-- Inside `/info`: `description`, `termsOfService`, `contact`, `license`
+The checker compares the **functional contract** of two specs, not their exact text. The following high-level rules apply.
 
-Lists under `required`, `tags`, `security`, and `servers` are compared with set semantics (order doesn't matter). All other fields are compared structurally.
+#### Treated as equivalent (ignored or normalized)
+
+- **Documentation fields** — `description`, `summary`, `externalDocs`, and any `x-` extension.
+- **Info metadata** — `title`, `version`, `description`, `termsOfService`, `contact`, `license`.
+- **Examples** — `example` / `examples` values, including when an example is present on only one side.
+- **Order, where order has no meaning** — `required`, `tags`, `servers`, `enum`, `oneOf` / `anyOf` / `allOf`, the `parameters` list, and the order of paths.
+- **References & components** — a `$ref` vs its inlined equivalent, the names of schema components, and unused (orphan) component definitions.
+- **Omitted vs default** — an optional field left at its default value (e.g. `required: false`, `nullable: false`, `additionalProperties: true`) vs the field being omitted.
+- **Formatting** — quoted vs unquoted response codes (`"200"` vs `200`) and YAML style (flow vs block).
+- **Path parameter names** — `/items/{id}` and `/items/{itemId}` describe the same endpoint.
+- **Security expressed differently** — a global `security` default vs the same requirement repeated per operation, and an explicit `security: []` vs an implicitly public operation.
+
+#### Treated as a difference (flagged)
+
+- **Added or removed** paths, operations, responses, parameters, or properties.
+- **Data type / format changes** — `type`, `format`, or a value whose type changes.
+- **Schema changes** — changed `enum` members or changed structural shape.
+- **Security changes** — adding/removing a required scheme, or changing a security scheme definition (e.g. `scheme: bearer` → `basic`, or `bearerFormat`).
+- **Different URL structure** — extra or renamed path segments, or a different number of path parameters.
+- **Parameter identity** — the same parameter name in a different location (e.g. `path` vs `query`).
+- **Required vs omitted** — `required: true` vs the field being absent.
 
 `$ref` references are fully resolved before comparison.
 
