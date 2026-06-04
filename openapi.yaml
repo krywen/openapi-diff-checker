@@ -1,0 +1,442 @@
+openapi: 3.0.3
+info:
+  title: Moonshot Backend API
+  description: API documentation for the Moonshot mobile app backend
+  version: 1.0.0
+servers:
+  - url: https://rra3ndem3r.us-east-1.awsapprunner.com/api
+    description: Production server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TokenOverview:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        symbol:
+          type: string
+        name:
+          type: string
+        logo_uri:
+          type: string
+        volume:
+          type: string
+        holders:
+          type: string
+        total_supply:
+          type: string
+        created_on:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        currentPrice:
+          type: string
+        priceChange:
+          type: number
+          format: float
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: string
+        address:
+          type: string
+        symbol:
+          type: string
+        name:
+          type: string
+        logo_uri:
+          type: string
+        decimals:
+          type: number
+        volume:
+          type: number
+        holders:
+          type: number
+        total_supply:
+          type: number
+        created_on:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Trade:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: number
+          format: float
+        price:
+          type: number
+          format: float
+        type:
+          type: string
+          enum: [BUY, SELL]
+        transactionHash:
+          type: string
+        userId:
+          type: string
+        tokenId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        isCompleted:
+          type: boolean
+
+    TradesWithToken:
+      type: object
+      properties:
+        token:
+          $ref: '#/components/schemas/Token'
+        trade:
+          $ref: '#/components/schemas/Trade'
+
+    PriceHistoryPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        price:
+          type: string
+
+    PriceHistoryResponse:
+      type: object
+      properties:
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceHistoryPoint'
+
+    UserScreenResponse:
+      type: object
+      properties:
+        trendingTokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenOverview'
+        topGainers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenOverview'
+
+    TradePrepareRequest:
+      type: object
+      properties:
+        tokenId:
+          type: string
+        usd:
+          type: string
+        type:
+          type: string
+          enum: [BUY, SELL]
+      required:
+        - tokenId
+        - usd
+        - type
+
+    TradePrepareResponse:
+      type: object
+      properties:
+        transaction:
+          type: string
+          description: Base64 encoded transaction
+        price:
+          type: string
+        tokenAmount:
+          type: string
+
+    TradeSubmitRequest:
+      type: object
+      properties:
+        tokenId:
+          type: string
+        amount:
+          type: string
+        price:
+          type: string
+        type:
+          type: string
+          enum: [BUY, SELL]
+        transaction:
+          type: string
+          description: Base64 encoded signed transaction
+
+    MoonpaySignUrlRequest:
+      type: object
+      properties:
+        url:
+          type: string
+      required:
+        - url
+
+    MoonpaySignUrlResponse:
+      type: object
+      properties:
+        signature:
+          type: string
+
+    CoinbaseOnrampRequest:
+      type: object
+      properties:
+        defaultPaymentMethod:
+          type: string
+          enum: [CARD, ACH_BANK_ACCOUNT, APPLE_PAY]
+        presetFiatAmount:
+          type: number
+          format: float
+      required:
+        - defaultPaymentMethod
+        - presetFiatAmount
+
+    CoinbaseOnrampResponse:
+      type: object
+      properties:
+        url:
+          type: string
+
+    UserRequest:
+      type: object
+      properties:
+        address:
+          type: string
+      required:
+        - address
+
+paths:
+  /token/usdc-balance:
+    get:
+      summary: Get USDC balance
+      description: Returns the USDC balance for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: USDC balance
+          content:
+            application/json:
+              schema:
+                type: number
+                format: float
+
+  /token/token-balance/{tokenMint}:
+    get:
+      summary: Get token balance
+      description: Returns the balance for a specific token mint
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: tokenMint
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The token mint address
+      responses:
+        '200':
+          description: Token balance
+          content:
+            application/json:
+              schema:
+                type: string
+                description: Balance as a string or number
+
+  /trade/prepare:
+    post:
+      summary: Prepare a trade
+      description: Prepares a buy or sell trade and returns a transaction to sign
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradePrepareRequest'
+      responses:
+        '200':
+          description: Trade preparation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradePrepareResponse'
+
+  /trade/submitAndWait:
+    post:
+      summary: Submit a signed trade transaction
+      description: Submits a signed transaction and waits for confirmation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeSubmitRequest'
+      responses:
+        '200':
+          description: Transaction submission result
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /tokenPrice/{coinId}:
+    get:
+      summary: Get token price history
+      description: Returns price history for a specific token
+      parameters:
+        - name: coinId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The coin/token ID
+        - name: timeRange
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [1D, 1W, 1M, MAX]
+          description: Time range for price history
+      responses:
+        '200':
+          description: Price history data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceHistoryResponse'
+
+  /tokenPrice/user-screen:
+    get:
+      summary: Get user screen token data
+      description: Returns trending tokens and top gainers for the user screen
+      responses:
+        '200':
+          description: User screen data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserScreenResponse'
+
+  /moonpay/sign-url:
+    post:
+      summary: Sign Moonpay URL
+      description: Signs a Moonpay URL for withdrawal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoonpaySignUrlRequest'
+      responses:
+        '200':
+          description: Signed URL response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoonpaySignUrlResponse'
+
+  /user-balance/total:
+    get:
+      summary: Get total user balance
+      description: Returns the total dollar value of all user token holdings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Total balance
+          content:
+            application/json:
+              schema:
+                type: number
+                format: float
+
+  /user:
+    post:
+      summary: Create or update user
+      description: Creates or updates a user with their wallet address
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '204':
+          description: User created/updated successfully
+
+  /coinbase/generate-onramp-url:
+    post:
+      summary: Generate Coinbase onramp URL
+      description: Generates a URL for depositing funds via Coinbase
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoinbaseOnrampRequest'
+      responses:
+        '200':
+          description: Onramp URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoinbaseOnrampResponse'
+
+  /user-balance:
+    get:
+      summary: Get user token balances
+      description: Returns the list of tokens held by the user with their details
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of user token holdings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TokenOverview'
+
+  /trade:
+    get:
+      summary: Get user trades
+      description: Returns the list of trades for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of trades with token information
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TradesWithToken'
