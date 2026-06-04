@@ -156,6 +156,39 @@ def _make_diff(
     )
 
 
+_CONTAINER_LABELS = {
+    "responses": "response",
+    "properties": "property",
+    "parameters": "parameter",
+    "schemas": "schema",
+    "requestBodies": "request body",
+    "securitySchemes": "security scheme",
+    "headers": "header",
+    "paths": "path",
+}
+
+
+def _container_label(parent_path: str) -> str | None:
+    segment = parent_path.rsplit("/", 1)[-1] if "/" in parent_path else parent_path
+    return _CONTAINER_LABELS.get(segment)
+
+
+def _describe_change(parent_path: str, key: str, value: Any, verb: str) -> str:
+    """Build a human-readable detail for an added/removed key.
+
+    Leads with *what* changed (named by its container, e.g. "response '401'")
+    rather than dumping the whole subtree, so a newly added response reads as
+    a new response and not as a change to whatever field it happens to contain.
+    """
+    label = _container_label(parent_path)
+    subject = f"{label} {key!r}" if label else f"{key!r}"
+    if isinstance(value, dict):
+        return f"{subject} {verb}"
+    if isinstance(value, list):
+        return f"{subject} {verb} ({len(value)} item(s))"
+    return f"{subject} {verb} (value {value!r})"
+
+
 def _resolve_refs(node: Any, root: dict) -> Any:
     if isinstance(node, dict):
         if "$ref" in node and len(node) == 1:
@@ -300,7 +333,7 @@ def _compare_dicts(
                 continue
             diffs.append(_make_diff(
                 child_path, "removed",
-                f"value {src[key]!r} removed",
+                _describe_change(path, key, src[key], "removed"),
                 src_lines, dest_lines,
             ))
         elif key not in src:
@@ -308,7 +341,7 @@ def _compare_dicts(
                 continue
             diffs.append(_make_diff(
                 child_path, "added",
-                f"value {dest[key]!r} added",
+                _describe_change(path, key, dest[key], "added"),
                 src_lines, dest_lines,
             ))
         elif key in EXAMPLE_KEYS:
