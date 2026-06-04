@@ -85,8 +85,8 @@ def compare(
     src_lines = _build_line_map(src)
     dest_lines = _build_line_map(dest)
 
-    src_resolved = _resolve_refs(src_spec, src_spec)
-    dest_resolved = _resolve_refs(dest_spec, dest_spec)
+    src_resolved = _strip_orphan_components(_resolve_refs(src_spec, src_spec))
+    dest_resolved = _strip_orphan_components(_resolve_refs(dest_spec, dest_spec))
 
     diffs: list[Difference] = []
     _compare_nodes(src_resolved, dest_resolved, "", diffs, src_lines, dest_lines)
@@ -176,6 +176,58 @@ def _follow_ref(ref: str, root: dict) -> Any:
         part = part.replace("~1", "/").replace("~0", "~")
         node = node[part]
     return copy.deepcopy(node)
+
+
+def _collect_refs(node: Any, refs: set[str]) -> None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "$ref" and isinstance(value, str):
+                refs.add(value)
+            else:
+                _collect_refs(value, refs)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_refs(item, refs)
+
+
+def _strip_orphan_components(spec: Any) -> Any:
+    """Drop component definitions that nothing references.
+
+    Decision: orphan (unreferenced) components do not affect functional
+    equivalence. ``_resolve_refs`` inlines every internal ``$ref`` before this
+    runs, so any definition left under ``/components`` that is not the target of
+    a surviving ``$ref`` describes nothing in the actual API contract. Such
+    leftovers are removed before comparison so that, e.g., factoring an enum out
+    into a named schema (and referencing it) compares equal to inlining it.
+
+    Components still pointed at by a surviving ``$ref`` (e.g. an unresolved
+    external reference) are kept, so genuine differences are never hidden.
+    """
+    if not isinstance(spec, dict) or not isinstance(spec.get("components"), dict):
+        return spec
+
+    refs: set[str] = set()
+    _collect_refs(spec, refs)
+
+    spec = copy.deepcopy(spec)
+    kept_components: dict[str, Any] = {}
+    for group, items in spec["components"].items():
+        if not isinstance(items, dict):
+            kept_components[group] = items
+            continue
+        kept = {
+            name: defn
+            for name, defn in items.items()
+            if f"#/components/{group}/{name}" in refs
+        }
+        if kept:
+            kept_components[group] = kept
+
+    if kept_components:
+        spec["components"] = kept_components
+    else:
+        del spec["components"]
+    return spec
 
 
 def _is_cosmetic(key: str) -> bool:
